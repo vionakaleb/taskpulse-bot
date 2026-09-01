@@ -135,7 +135,8 @@ export async function sendMonthlyBillReminders() {
 
 // --- Webhook Integration ---
 const WEBHOOK_PATH = '/secret-telegram-webhook';
-const WEBHOOK_URL = `https://taskpulse-bot-zmlm.onrender.com${WEBHOOK_PATH}`;
+const BOT_URL = process.env.BOT_URL || 'https://taskpulse-bot-r5zy.onrender.com';
+const WEBHOOK_URL = `${BOT_URL}${WEBHOOK_PATH}`;
 
 app.use(bot.webhookCallback(WEBHOOK_PATH));
 
