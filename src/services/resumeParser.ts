@@ -13,7 +13,7 @@ export const ResumeService = {
     
     let text = '';
     if (fileName.endsWith('.pdf')) {
-      const data = await pdf(buffer);
+      const data = await pdf.default(buffer);
       text = data.text;
     } else if (fileName.endsWith('.docx')) {
       const data = await mammoth.extractRawText({ buffer });
