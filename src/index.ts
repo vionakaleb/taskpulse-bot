@@ -1,5 +1,6 @@
 import { Telegraf } from 'telegraf';
 import dotenv from 'dotenv';
+import express from 'express';
 import { supabase } from './services/supabase.js';
 import { ItemService } from './services/itemService.js';
 import { ResumeService } from './services/resumeParser.js';
@@ -8,6 +9,31 @@ import { JobScraperService } from './services/jobScraper.js';
 dotenv.config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN || '');
+
+// --- HTTP Server for Render Health Check & Cron ---
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.get('/health', (req, res) => res.send('OK'));
+
+app.get('/cron/reminders', async (req, res) => {
+  const key = req.query.key;
+  if (key !== process.env.CRON_SECRET) {
+    return res.status(403).send('Forbidden');
+  }
+
+  try {
+    await sendMonthlyBillReminders();
+    res.send('Reminders sent successfully');
+  } catch (e: any) {
+    console.error('Cron Execution Error:', e);
+    res.status(500).send(`Error: ${e.message}`);
+  }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Health check server listening on port ${PORT}`);
+});
 
 // --- CRUD Logic ---
 bot.start((ctx) => ctx.reply('Welcome to TaskPulse! Use /help to see what I can do.'));
