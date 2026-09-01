@@ -3,21 +3,21 @@
 CREATE OR REPLACE FUNCTION cleanup_expired_items()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM items 
+  DELETE FROM tele_items 
   WHERE type IN ('checklist', 'event') 
   AND created_at < NOW() - INTERVAL '2 months';
 END;
 $$ LANGUAGE plpgsql;
 
--- 2. Bill Notification: Identify users who have bills to pay
--- This function returns a list of users who have any 'bill' items
+-- 2. Bill Notification: Identify tele_users who have bills to pay
+-- This function returns a list of tele_users who have any 'bill' tele_items
 CREATE OR REPLACE FUNCTION get_bill_payers()
 RETURNS TABLE(telegram_id BIGINT, username TEXT) AS $$
 BEGIN
   RETURN QUERY 
   SELECT DISTINCT u.telegram_id, u.username 
-  FROM users u
-  JOIN items i ON u.telegram_id = i.user_id
+  FROM tele_users u
+  JOIN tele_items i ON u.telegram_id = i.user_id
   WHERE i.type = 'bill';
 END;
 $$ LANGUAGE plpgsql;

@@ -4,7 +4,7 @@ export const JobScraperService = {
   async findJobs(userId: number) {
     // Fetch user's parsed skills and titles from Supabase
     const { data: user, error } = await supabase
-      .from('users')
+      .from('tele_users')
       .select('skills, job_titles')
       .eq('telegram_id', userId)
       .single();

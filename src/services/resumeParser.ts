@@ -25,7 +25,7 @@ export const ResumeService = {
     const parsedData = this.parseResume(text);
 
     const { error } = await supabase
-      .from('users')
+      .from('tele_users')
       .upsert({ 
         telegram_id: telegramId, 
         skills: parsedData.skills, 

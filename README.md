@@ -30,7 +30,7 @@ TaskPulse is a Telegram bot designed to help you manage your life and career. It
 
 ### 2. Database Setup
 Run the following SQL scripts in your Supabase SQL Editor:
-1. Execute `supabase_schema.sql` to create the `users` and `items` tables.
+1. Execute `supabase_schema.sql` to create the `tele_users` and `tele_items` tables.
 2. Execute `supabase_cron.sql` to set up the cleanup and notification functions.
 
 ### 3. Installation
@@ -65,7 +65,7 @@ npm start
 - `/start` - Start the bot
 - `/help` - Show all available commands
 - `/add [type] [title]` - Add item (e.g., `/add bill Electric Bill`)
-- `/list` - View your current items
+- `/list` - View your current tele_items
 - `/delete [id]` - Delete an item using its ID
 - `/resume` - Upload your resume for job searching
 - `/jobs` - Find suitable jobs based on your profile

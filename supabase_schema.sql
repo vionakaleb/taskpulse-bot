@@ -1,5 +1,5 @@
 -- Users table
-CREATE TABLE users (
+CREATE TABLE tele_users (
   telegram_id BIGINT PRIMARY KEY,
   username TEXT,
   resume_url TEXT,
@@ -9,9 +9,9 @@ CREATE TABLE users (
 );
 
 -- Task Items table
-CREATE TABLE items (
+CREATE TABLE tele_items (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id BIGINT REFERENCES users(telegram_id) ON DELETE CASCADE,
+  user_id BIGINT REFERENCES tele_users(telegram_id) ON DELETE CASCADE,
   type TEXT CHECK (type IN ('checklist', 'event', 'bill')),
   title TEXT NOT NULL,
   description TEXT,
@@ -21,17 +21,17 @@ CREATE TABLE items (
 );
 
 -- Index for cleanup
-CREATE INDEX idx_items_created_at ON items(created_at);
+CREATE INDEX idx_items_created_at ON tele_items(created_at);
 
 -- Cleanup Function: Delete checklist and events older than 2 months
 CREATE OR REPLACE FUNCTION cleanup_expired_items()
 RETURNS void AS $$
 BEGIN
-  DELETE FROM items 
+  DELETE FROM tele_items 
   WHERE type IN ('checklist', 'event') 
   AND created_at < NOW() - INTERVAL '2 months';
 END;
 $$ LANGUAGE plpgsql;
 
 -- Notification logic for Bills (can be triggered by external cron or pg_cron)
--- SELECT telegram_id FROM users JOIN items ON users.telegram_id = items.user_id WHERE items.type = 'bill';
+-- SELECT telegram_id FROM tele_users JOIN tele_items ON tele_users.telegram_id = tele_items.user_id WHERE tele_items.type = 'bill';

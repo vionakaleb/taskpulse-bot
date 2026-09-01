@@ -11,7 +11,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN || '');
 
 // --- CRUD Logic ---
 bot.start((ctx) => ctx.reply('Welcome to TaskPulse! Use /help to see what I can do.'));
-bot.help((ctx) => ctx.reply('Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list - List all items\n/delete [id] - Delete an item\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs'));
+bot.help((ctx) => ctx.reply('Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list - List all tele_items\n/delete [id] - Delete an item\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs'));
 
 bot.command('add', async (ctx) => {
   const text = ctx.message.text.split(' ').slice(1).join(' ');
@@ -35,10 +35,10 @@ bot.command('add', async (ctx) => {
 bot.command('list', async (ctx) => {
   try {
     await ItemService.ensureUser(ctx.from.id, ctx.from.username);
-    const items = await ItemService.listItems(ctx.from.id);
-    if (!items || items.length === 0) return ctx.reply('Your list is empty.');
+    const tele_items = await ItemService.listItems(ctx.from.id);
+    if (!tele_items || tele_items.length === 0) return ctx.reply('Your list is empty.');
 
-    const list = items.map(i => `[${i.id.slice(0, 8)}] ${i.type}: ${i.title}`).join('\n');
+    const list = tele_items.map(i => `[${i.id.slice(0, 8)}] ${i.type}: ${i.title}`).join('\n');
     ctx.reply(`Your Items:\n${list}\n\nUse /delete [id] to remove.`);
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
@@ -92,13 +92,13 @@ bot.command('jobs', async (ctx) => {
 // --- Automated Admin Logic (Notification Trigger) ---
 // This function is designed to be called by an external cron (GitHub Action or Supabase Edge Function)
 export async function sendMonthlyBillReminders() {
-  const { data: users, error } = await supabase
+  const { data: tele_users, error } = await supabase
     .rpc('get_bill_payers');
 
   if (error) console.error('Cron Error:', error);
-  if (!users) return;
+  if (!tele_users) return;
 
-  for (const user of users) {
+  for (const user of tele_users) {
     try {
       await bot.telegram.sendMessage(user.telegram_id, '📅 It is the 1st of the month! Please review and update your Bill Payments list.');
     } catch (e) {
