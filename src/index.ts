@@ -1,9 +1,9 @@
 import { Telegraf } from 'telegraf';
 import dotenv from 'dotenv';
-import { supabase } from './services/supabase';
-import { ItemService } from './services/itemService';
-import { ResumeService } from './services/resumeParser';
-import { JobScraperService } from './services/jobScraper';
+import { supabase } from './services/supabase.js';
+import { ItemService } from './services/itemService.js';
+import { ResumeService } from './services/resumeParser.js';
+import { JobScraperService } from './services/jobScraper.js';
 
 dotenv.config();
 
@@ -65,14 +65,14 @@ bot.command('resume', async (ctx) => {
 
 bot.on('document', async (ctx) => {
   const file = ctx.message.document;
-  if (!file.mime_type.includes('pdf') && !file.mime_type.includes('wordprocessingml')) {
+  if (!file.mime_type || (!file.mime_type.includes('pdf') && !file.mime_type.includes('wordprocessingml'))) {
     return ctx.reply('Unsupported file type. Please send PDF or DOCX.');
   }
 
   try {
     ctx.reply('Parsing your resume... ⏳');
     const fileLink = await ctx.telegram.getFileLink(file.file_id);
-    const result = await ResumeService.uploadResume(ctx.from.id, file.file_id, file.file_name);
+    const result = await ResumeService.uploadResume(ctx.from.id, file.file_id, file.file_name || 'resume');
     
     ctx.reply(`✅ Resume parsed successfully!\n\nDetected Skills: ${result.skills.join(', ') || 'None'}\nDetected Titles: ${result.jobTitles.join(', ') || 'None'}\n\nYou can now use /jobs to find suitable positions.`);
   } catch (e: any) {

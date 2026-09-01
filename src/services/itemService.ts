@@ -1,5 +1,5 @@
-import { supabase } from '../services/supabase';
-import { TaskItem } from '../types';
+import { supabase } from '../services/supabase.js';
+import type { TaskItem } from '../types/index.js';
 
 export const ItemService = {
   async ensureUser(telegramId: number, username?: string) {

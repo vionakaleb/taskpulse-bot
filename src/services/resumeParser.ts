@@ -1,5 +1,5 @@
-import { supabase } from '../services/supabase';
-import pdf from 'pdf-parse';
+import { supabase } from '../services/supabase.js';
+import * as pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 
 export const ResumeService = {
