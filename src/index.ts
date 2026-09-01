@@ -133,7 +133,14 @@ export async function sendMonthlyBillReminders() {
   }
 }
 
-bot.launch().then(() => console.log('TaskPulse Bot is running...'));
+// --- Webhook Integration ---
+const WEBHOOK_PATH = '/secret-telegram-webhook';
+const WEBHOOK_URL = `https://taskpulse-bot-zmlm.onrender.com${WEBHOOK_PATH}`;
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+app.use(bot.webhookCallback(WEBHOOK_PATH));
+
+bot.telegram.setWebhook(WEBHOOK_URL).then(() => {
+  console.log(`✅ Webhook integrated: ${WEBHOOK_URL}`);
+}).catch((err) => {
+  console.error('❌ Webhook registration failed:', err);
+});

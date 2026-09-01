@@ -21,7 +21,31 @@ TaskPulse is a Telegram bot designed to help you manage your life and career. It
 - **Parsing**: `pdf-parse` & `mammoth`
 - **Scheduling**: Supabase `pg_cron` or GitHub Actions
 
-## 🚀 Getting Started
+## 🚀 Deployment & Integration
+
+### 1. Deploy to Render
+This bot is optimized for deployment on [Render](https://render.com).
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+- **Runtime**: Node.js
+
+### 2. Telegram Integration (Webhooks)
+The bot uses **Webhooks** for high performance. Once deployed to Render, the bot automatically registers its endpoint with Telegram.
+
+**Required Environment Variables on Render:**
+| Variable | Description | Where to get it |
+| :--- | :--- | :--- |
+| `BOT_TOKEN` | Telegram Bot API Token | [@BotFather](https://t.me/botfather) |
+| `SUPABASE_URL` | Your Supabase Project URL | Supabase Dashboard $\rightarrow$ Settings |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Service Role Key | Supabase Dashboard $\rightarrow$ Settings |
+| `CRON_SECRET` | A secure string for the cron endpoint | Create your own random string |
+| `PORT` | Server port (Default: 10000) | Provided by Render |
+
+### 3. Verification
+Check your Render logs. You should see:
+`✅ Webhook integrated: https://your-app-url.onrender.com/secret-telegram-webhook`
+
+## 💻 Local Development
 
 ### 1. Prerequisites
 - Node.js v18+
@@ -33,7 +57,7 @@ Run the following SQL scripts in your Supabase SQL Editor:
 1. Execute `supabase_schema.sql` to create the `tele_users` and `tele_items` tables.
 2. Execute `supabase_cron.sql` to set up the cleanup and notification functions.
 
-### 3. Installation
+### 3. Installation & Run
 ```bash
 # Clone the project
 git clone <repo-url>
@@ -41,24 +65,9 @@ cd TaskPulse
 
 # Install dependencies
 npm install
-```
 
-### 4. Configuration
-Create a `.env` file in the root directory:
-```env
-BOT_TOKEN=your_telegram_bot_token
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-```
-
-### 5. Run the Bot
-```bash
-# Development mode
+# Start in development mode
 npm run dev
-
-# Production build
-npm run build
-npm start
 ```
 
 ## ⌨️ Bot Commands
