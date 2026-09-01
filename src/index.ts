@@ -12,7 +12,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN || '');
 
 // --- HTTP Server for Render Health Check & Cron ---
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = Number(process.env.PORT) || 10000;
 
 app.get('/health', (req, res) => res.send('OK'));
 
