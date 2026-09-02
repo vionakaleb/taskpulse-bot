@@ -42,7 +42,7 @@ bot.start((ctx) =>
 );
 bot.help((ctx) =>
   ctx.reply(
-    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
+    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
   ),
 );
 
@@ -123,27 +123,47 @@ bot.command("delete", async (ctx) => {
 
     // AI parsing for name-based delete
     const aiParsed = await AIService.parseDeleteCommand(input);
-    if (aiParsed) {
-      const matches = await ItemService.findItemByTitle(
-        ctx.from.id,
-        aiParsed.title,
-      );
-      if (!matches || matches.length === 0) {
-        return ctx.reply(
-          `❌ Could not find any item matching "${aiParsed.title}"`,
-        );
+    if (aiParsed && aiParsed.titles) {
+      let deletedCount = 0;
+      const failed: string[] = [];
+
+      for (const title of aiParsed.titles) {
+        const matches = await ItemService.findItemByTitle(ctx.from.id, title);
+        if (matches && matches.length === 1) {
+          await ItemService.deleteItem(ctx.from.id, matches[0].id);
+          deletedCount++;
+        } else if (!matches || matches.length === 0) {
+          failed.push(title);
+        } else {
+          failed.push(`${title} (multiple matches)`);
+        }
       }
-      if (matches.length > 1) {
-        const list = matches.map((m) => `✅ ${m.title}`).join("\n");
-        return ctx.reply(
-          `Found multiple matches. Please use the ID to delete:\n${list}`,
-        );
+
+      let response = `✅ Deleted ${deletedCount} item(s).`;
+      if (failed.length > 0) {
+        response += `\n❌ Could not identify:\n${failed.join('\n')}`;
       }
-      await ItemService.deleteItem(ctx.from.id, matches[0].id);
-      return ctx.reply(`✅ Deleted: ${matches[0].title}`);
+      return ctx.reply(response);
     }
 
     ctx.reply("❌ Could not identify the item to delete.");
+  } catch (e: any) {
+    ctx.reply(`❌ Error: ${e.message}`);
+  }
+});
+
+bot.command("clear", async (ctx) => {
+  const type = ctx.message.text.split(" ")[1]?.toLowerCase();
+  if (!type) return ctx.reply("Usage: /clear [checklist|event|bill]");
+
+  if (!["checklist", "event", "bill"].includes(type)) {
+    return ctx.reply("Invalid type. Please use checklist, event, or bill.");
+  }
+
+  try {
+    await ItemService.ensureUser(ctx.from.id, ctx.from.username);
+    await ItemService.clearItemsByType(ctx.from.id, type);
+    ctx.reply(`✅ Cleared all ${type} items.`);
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
   }

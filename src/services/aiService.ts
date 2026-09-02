@@ -50,12 +50,17 @@ export const AIService = {
   async parseDeleteCommand(text: string) {
     const prompt = `
       Extract task identification details from the following text: "${text}"
-      Return ONLY a JSON object with these keys:
-      - type: one of "checklist", "event", "bill"
-      - title: the keywords to identify the task
+      The text may contain one or more items to delete, potentially separated by commas, newlines, or emojis like ✅.
 
-      Example input: "bought cat-litter"
-      Example output: {"type": "checklist", "title": "bought cat-litter"}
+      Return ONLY a JSON object with these keys:
+      - type: one of "checklist", "event", "bill" (map the user's requested category to one of these)
+      - titles: an array of strings containing the keywords to identify each task (strip emojis and numbering)
+
+      Example input: "bought cat-litter, bought dog-food"
+      Example output: {"type": "checklist", "titles": ["bought cat-litter", "bought dog-food"]}
+
+      Example input: "✅ item one\\n✅ item two"
+      Example output: {"type": "checklist", "titles": ["item one", "item two"]}
     `;
 
     const result = await model.generateContent(prompt);

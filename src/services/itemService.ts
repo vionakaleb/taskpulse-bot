@@ -71,4 +71,14 @@ export const ItemService = {
     if (error) throw error;
     return true;
   },
+
+  async clearItemsByType(userId: number, type: string) {
+    const { error } = await supabase
+      .from("tele_items")
+      .delete()
+      .eq("user_id", userId)
+      .eq("type", type.toLowerCase());
+    if (error) throw error;
+    return true;
+  },
 };
