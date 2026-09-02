@@ -5,6 +5,7 @@ import { supabase } from './services/supabase.js';
 import { ItemService } from './services/itemService.js';
 import { ResumeService } from './services/resumeParser.js';
 import { JobScraperService } from './services/jobScraper.js';
+import { AIService } from './services/aiService.js';
 
 dotenv.config();
 
@@ -37,20 +38,33 @@ app.listen(PORT, '0.0.0.0', () => {
 
 // --- CRUD Logic ---
 bot.start((ctx) => ctx.reply('Welcome to TaskPulse! Use /help to see what I can do.'));
-bot.help((ctx) => ctx.reply('Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list - List all tele_items\n/delete [id] - Delete an item\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs'));
+bot.help((ctx) => ctx.reply('Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list - List all tele_items\n/delete [id] - Delete an item\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"'));
 
 bot.command('add', async (ctx) => {
   const text = ctx.message.text.split(' ').slice(1).join(' ');
+  if (!text) return ctx.reply('Usage: /add [checklist|event|bill] [title]');
+
   const parts = text.split(' ');
   const type = parts[0]?.toLowerCase();
   const title = parts.slice(1).join(' ');
 
-  if (!['checklist', 'event', 'bill'].includes(type!) || !title) {
-    return ctx.reply('Usage: /add [checklist|event|bill] [title]');
-  }
-
   try {
     await ItemService.ensureUser(ctx.from.id, ctx.from.username);
+
+    // AI parsing for complex inputs
+    if (parts.length > 3 || text.includes('on') || text.includes('-')) {
+      const aiParsed = await AIService.parseAddCommand(text);
+      if (aiParsed) {
+        await ItemService.addItem(ctx.from.id, aiParsed.type as any, aiParsed.title, undefined, aiParsed.dueDate);
+        return ctx.reply(`✅ AI Added ${aiParsed.type}: ${aiParsed.title}${aiParsed.dueDate ? ` on ${aiParsed.dueDate}` : ''}`);
+      }
+    }
+
+    // Fallback to simple parsing
+    if (!['checklist', 'event', 'bill'].includes(type!) || !title) {
+      return ctx.reply('Usage: /add [checklist|event|bill] [title]');
+    }
+
     await ItemService.addItem(ctx.from.id, type as any, title);
     ctx.reply(`✅ Added ${type}: ${title}`);
   } catch (e: any) {
@@ -64,7 +78,7 @@ bot.command('list', async (ctx) => {
     const tele_items = await ItemService.listItems(ctx.from.id);
     if (!tele_items || tele_items.length === 0) return ctx.reply('Your list is empty.');
 
-    const list = tele_items.map(i => `[${i.id.slice(0, 8)}] ${i.type}: ${i.title}`).join('\n');
+    const list = tele_items.map(i => `✅ ${i.type}: ${i.title}`).join('\n');
     ctx.reply(`Your Items:\n${list}\n\nUse /delete [id] to remove.`);
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
@@ -72,13 +86,34 @@ bot.command('list', async (ctx) => {
 });
 
 bot.command('delete', async (ctx) => {
-  const id = ctx.message.text.split(' ')[1];
-  if (!id) return ctx.reply('Usage: /delete [id]');
+  const input = ctx.message.text.split(' ').slice(1).join(' ');
+  if (!input) return ctx.reply('Usage: /delete [id or item name]');
 
   try {
     await ItemService.ensureUser(ctx.from.id, ctx.from.username);
-    await ItemService.deleteItem(ctx.from.id, id);
-    ctx.reply('✅ Item deleted.');
+
+    // If input is a UUID (roughly 36 chars), use direct delete
+    if (input.length >= 32 && /^[0-9a-f-]+$/.test(input)) {
+      await ItemService.deleteItem(ctx.from.id, input);
+      return ctx.reply('✅ Item deleted.');
+    }
+
+    // AI parsing for name-based delete
+    const aiParsed = await AIService.parseDeleteCommand(input);
+    if (aiParsed) {
+      const matches = await ItemService.findItemByTitle(ctx.from.id, aiParsed.title);
+      if (!matches || matches.length === 0) {
+        return ctx.reply(`❌ Could not find any item matching "${aiParsed.title}"`);
+      }
+      if (matches.length > 1) {
+        const list = matches.map(m => `✅ ${m.title}`).join('\n');
+        return ctx.reply(`Found multiple matches. Please use the ID to delete:\n${list}`);
+      }
+      await ItemService.deleteItem(ctx.from.id, matches[0].id);
+      return ctx.reply(`✅ Deleted: ${matches[0].title}`);
+    }
+
+    ctx.reply('❌ Could not identify the item to delete.');
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
   }
@@ -99,7 +134,7 @@ bot.on('document', async (ctx) => {
     ctx.reply('Parsing your resume... ⏳');
     const fileLink = await ctx.telegram.getFileLink(file.file_id);
     const result = await ResumeService.uploadResume(ctx.from.id, file.file_id, file.file_name || 'resume');
-    
+
     ctx.reply(`✅ Resume parsed successfully!\n\nDetected Skills: ${result.skills.join(', ') || 'None'}\nDetected Titles: ${result.jobTitles.join(', ') || 'None'}\n\nYou can now use /jobs to find suitable positions.`);
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
@@ -115,8 +150,29 @@ bot.command('jobs', async (ctx) => {
   }
 });
 
+// --- Natural Language Q&A ---
+bot.on('text', async (ctx) => {
+  // Ignore if it's a command
+  if (ctx.message.text.startsWith('/')) return;
+
+  try {
+    await ItemService.ensureUser(ctx.from.id, ctx.from.username);
+
+    if (!AIService.checkRateLimit(ctx.from.id)) {
+      return ctx.reply('⚠️ You have reached your AI request limit for this hour. Please try again later!');
+    }
+
+    ctx.reply('Thinking... 🧠');
+    const items = await ItemService.listItems(ctx.from.id);
+    const answer = await AIService.answerQuestion(ctx.from.id, ctx.message.text, items);
+    ctx.reply(answer);
+  } catch (e: any) {
+    console.error('NL Query Error:', e);
+    ctx.reply('❌ Sorry, I had trouble processing that request.');
+  }
+});
+
 // --- Automated Admin Logic (Notification Trigger) ---
-// This function is designed to be called by an external cron (GitHub Action or Supabase Edge Function)
 export async function sendMonthlyBillReminders() {
   const { data: tele_users, error } = await supabase
     .rpc('get_bill_payers');

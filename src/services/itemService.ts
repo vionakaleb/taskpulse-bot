@@ -12,10 +12,16 @@ export const ItemService = {
     return data;
   },
 
-  async addItem(userId: number, type: TaskItem['type'], title: string, description?: string) {
+  async addItem(userId: number, type: TaskItem['type'], title: string, description?: string, dueDate?: string) {
     const { data, error } = await supabase
       .from('tele_items')
-      .insert({ user_id: userId, type, title, description })
+      .insert({
+        user_id: userId,
+        type,
+        title,
+        description,
+        due_date: dueDate
+      })
       .select()
       .single();
     if (error) throw error;
@@ -28,6 +34,17 @@ export const ItemService = {
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data;
+  },
+
+  async findItemByTitle(userId: number, title: string) {
+    const { data, error } = await supabase
+      .from('tele_items')
+      .select('*')
+      .eq('user_id', userId)
+      .ilike('title', `%${title}%`)
+      .limit(5);
     if (error) throw error;
     return data;
   },
