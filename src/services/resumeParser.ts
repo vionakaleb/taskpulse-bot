@@ -1,5 +1,5 @@
 import { supabase } from '../services/supabase.js';
-import pdf from 'pdf-parse/lib/pdf-parse.js';
+import * as pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 
 export const ResumeService = {
@@ -13,7 +13,7 @@ export const ResumeService = {
     
     let text = '';
     if (fileName.endsWith('.pdf')) {
-      const data = await pdf(buffer);
+      const data = await (pdfParse as any)(buffer);
       text = data.text;
     } else if (fileName.endsWith('.docx')) {
       const data = await mammoth.extractRawText({ buffer });
