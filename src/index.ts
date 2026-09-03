@@ -231,7 +231,7 @@ bot.on("document", async (ctx) => {
 
     // 2. Parse the resume text
     const fileLink = await ctx.telegram.getFileLink(file.file_id);
-    const response = await fetch(fileLink);
+    const response = await fetch(fileLink as URL);
     const buffer = Buffer.from(await response.arrayBuffer());
 
     let text = '';
