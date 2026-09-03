@@ -87,5 +87,54 @@ export const AIService = {
     return result.response.text();
   },
 
+  async structureResume(text: string) {
+    const prompt = `
+      Extract structured resume data from the following text:
+      "${text}"
+
+      Return ONLY a JSON object following this exact structure:
+      {
+        "name": "Full Name",
+        "headline": "Professional Title",
+        "location": "City, Country",
+        "email": "email@example.com",
+        "phone": "phone number",
+        "website": "url",
+        "linkedin": "url",
+        "summary": "Professional summary paragraph",
+        "experience": [
+          { "title": "Job Title", "org": "Company", "location": "City", "dates": "Start - End", "bullets": ["Accomplishment 1", "Accomplishment 2"] }
+        ],
+        "education": [
+          { "title": "Degree", "org": "University", "location": "City", "dates": "Graduation Year", "bullets": ["Honors/Coursework"] }
+        ],
+        "certifications": [
+          { "title": "Cert Name", "org": "Issuer", "location": "", "dates": "Year", "bullets": [] }
+        ],
+        "achievements": [
+          { "title": "Award Name", "org": "Organization", "location": "", "dates": "Year", "bullets": [] }
+        ],
+        "projects": [
+          { "title": "Project Name", "org": "Role/Context", "location": "", "dates": "Year", "bullets": ["What I did", "Tech used"] }
+        ],
+        "skills": [
+          { "label": "Category (e.g. Languages)", "value": "Skill 1, Skill 2" }
+        ],
+        "languages": [
+          { "name": "Language", "level": "Native/Fluent/Basic" }
+        ]
+      }
+
+      If a field is not found, use an empty string or empty array.
+      Ensure "bullets" is always an array of strings.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    const jsonMatch = response.match(/\{.*\}/s);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  },
+
   checkRateLimit
+
 };

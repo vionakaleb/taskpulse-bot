@@ -5,6 +5,9 @@ CREATE TABLE tele_users (
   resume_url TEXT,
   skills TEXT[],
   job_titles TEXT[],
+  reesu_user_id UUID,
+  reesu_access_token TEXT,
+  reesu_refresh_token TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

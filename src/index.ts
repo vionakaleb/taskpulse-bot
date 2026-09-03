@@ -6,6 +6,7 @@ import { ItemService } from "./services/itemService.js";
 import { ResumeService } from "./services/resumeParser.js";
 import { JobScraperService } from "./services/jobScraper.js";
 import { AIService } from "./services/aiService.js";
+import { ReesuClient } from "./services/reesuClient.js";
 
 dotenv.config();
 
@@ -42,7 +43,7 @@ bot.start((ctx) =>
 );
 bot.help((ctx) =>
   ctx.reply(
-    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
+    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n/reesu_login [email] [password] - Link your Reesu account\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
   ),
 );
 
@@ -169,6 +170,34 @@ bot.command("clear", async (ctx) => {
   }
 });
 
+bot.command("reesu_login", async (ctx) => {
+  const parts = ctx.message.text.split(" ");
+  if (parts.length < 3) {
+    return ctx.reply("Usage: /reesu_login [email] [password]");
+  }
+
+  const email = parts[1];
+  const password = parts[2];
+
+  try {
+    ctx.reply("Authenticating with Reesu... ⏳");
+    const tokens = await ReesuClient.loginUser(email, password);
+
+    const { error } = await supabase
+      .from('tele_users')
+      .update({
+        reesu_access_token: tokens.access_token,
+        reesu_refresh_token: tokens.refresh_token
+      })
+      .eq('telegram_id', ctx.from.id);
+
+    if (error) throw error;
+    ctx.reply("✅ Successfully linked your Reesu account!");
+  } catch (e: any) {
+    ctx.reply(`❌ Login failed: ${e.message}`);
+  }
+});
+
 // --- Resume & Jobs ---
 bot.command("resume", async (ctx) => {
   ctx.reply("Please send me your resume as a PDF or DOCX file.");
@@ -186,15 +215,77 @@ bot.on("document", async (ctx) => {
 
   try {
     ctx.reply("Parsing your resume... ⏳");
+
+    // 1. Get Reesu auth from DB
+    const { data: user, error: userError } = await supabase
+      .from('tele_users')
+      .select('reesu_access_token, reesu_refresh_token')
+      .eq('telegram_id', ctx.from.id)
+      .single();
+
+    if (userError || !user?.reesu_access_token) {
+      return ctx.reply("❌ Please link your Reesu account first using /reesu_login [email] [password]");
+    }
+
+    let token = user.reesu_access_token;
+
+    // 2. Parse the resume text
     const fileLink = await ctx.telegram.getFileLink(file.file_id);
-    const result = await ResumeService.uploadResume(
-      ctx.from.id,
-      file.file_id,
-      file.file_name || "resume",
-    );
+    const response = await fetch(fileLink);
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    let text = '';
+    if (file.file_name?.endsWith('.pdf')) {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buffer);
+      text = data.text;
+    } else if (file.file_name?.endsWith('.docx')) {
+      const mammoth = require('mammoth');
+      const data = await mammoth.extractRawText({ buffer });
+      text = data.value;
+    } else {
+      throw new Error('Unsupported file format.');
+    }
+
+    // 3. Structure using AI
+    ctx.reply("Structuring your resume for Reesu... 🧠");
+    const structuredContent = await AIService.structureResume(text);
+    if (!structuredContent) {
+      throw new Error("Failed to structure the resume content.");
+    }
+
+    // 4. Update Reesu API
+    // First, try to find an existing resume
+    try {
+      const resumesResponse = await ReesuClient.listResumes(token);
+      const existingResume = resumesResponse[0];
+
+      if (existingResume) {
+        await ReesuClient.updateResume(token, existingResume.id, {
+          content: structuredContent
+        });
+        ctx.reply("✅ Your Reesu resume has been updated!");
+      } else {
+        await ReesuClient.createResume(token, "My Resume", structuredContent);
+        ctx.reply("✅ Your first Reesu resume has been created!");
+      }
+    } catch (apiError: any) {
+      console.error("Reesu API Error:", apiError);
+      throw new Error(`Reesu API failed: ${apiError.message}`);
+    }
+
+    // Also keep the local bot cache updated
+    const parsedData = ResumeService.parseResume(text);
+    await supabase
+      .from('tele_users')
+      .update({
+        skills: parsedData.skills,
+        job_titles: parsedData.jobTitles
+      })
+      .eq('telegram_id', ctx.from.id);
 
     ctx.reply(
-      `✅ Resume parsed successfully!\n\nDetected Skills: ${result.skills.join(", ") || "None"}\nDetected Titles: ${result.jobTitles.join(", ") || "None"}\n\nYou can now use /jobs to find suitable positions.`,
+      `✅ Resume processed successfully!\n\nDetected Skills: ${parsedData.skills.join(", ") || "None"}\nDetected Titles: ${parsedData.jobTitles.join(", ") || "None"}\n\nYou can now use /jobs to find suitable positions.`,
     );
   } catch (e: any) {
     ctx.reply(`❌ Error: ${e.message}`);
