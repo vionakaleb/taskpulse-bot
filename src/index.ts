@@ -142,7 +142,7 @@ bot.command("delete", async (ctx) => {
 
       let response = `✅ Deleted ${deletedCount} item(s).`;
       if (failed.length > 0) {
-        response += `\n❌ Could not identify:\n${failed.join('\n')}`;
+        response += `\n❌ Could not identify:\n${failed.join("\n")}`;
       }
       return ctx.reply(response);
     }
@@ -176,20 +176,20 @@ bot.command("reesu_login", async (ctx) => {
     return ctx.reply("Usage: /reesu_login [email] [password]");
   }
 
-  const email = parts[1];
-  const password = parts[2];
+  const email = parts[1] ?? "";
+  const password = parts[2] ?? "";
 
   try {
     ctx.reply("Authenticating with Reesu... ⏳");
     const tokens = await ReesuClient.loginUser(email, password);
 
     const { error } = await supabase
-      .from('tele_users')
+      .from("tele_users")
       .update({
         reesu_access_token: tokens.access_token,
-        reesu_refresh_token: tokens.refresh_token
+        reesu_refresh_token: tokens.refresh_token,
       })
-      .eq('telegram_id', ctx.from.id);
+      .eq("telegram_id", ctx.from.id);
 
     if (error) throw error;
     ctx.reply("✅ Successfully linked your Reesu account!");
@@ -218,13 +218,15 @@ bot.on("document", async (ctx) => {
 
     // 1. Get Reesu auth from DB
     const { data: user, error: userError } = await supabase
-      .from('tele_users')
-      .select('reesu_access_token, reesu_refresh_token')
-      .eq('telegram_id', ctx.from.id)
+      .from("tele_users")
+      .select("reesu_access_token, reesu_refresh_token")
+      .eq("telegram_id", ctx.from.id)
       .single();
 
     if (userError || !user?.reesu_access_token) {
-      return ctx.reply("❌ Please link your Reesu account first using /reesu_login [email] [password]");
+      return ctx.reply(
+        "❌ Please link your Reesu account first using /reesu_login [email] [password]",
+      );
     }
 
     let token = user.reesu_access_token;
@@ -234,17 +236,17 @@ bot.on("document", async (ctx) => {
     const response = await fetch(fileLink as URL);
     const buffer = Buffer.from(await response.arrayBuffer());
 
-    let text = '';
-    if (file.file_name?.endsWith('.pdf')) {
-      const pdfParse = require('pdf-parse');
+    let text = "";
+    if (file.file_name?.endsWith(".pdf")) {
+      const pdfParse = require("pdf-parse");
       const data = await pdfParse(buffer);
       text = data.text;
-    } else if (file.file_name?.endsWith('.docx')) {
-      const mammoth = require('mammoth');
+    } else if (file.file_name?.endsWith(".docx")) {
+      const mammoth = require("mammoth");
       const data = await mammoth.extractRawText({ buffer });
       text = data.value;
     } else {
-      throw new Error('Unsupported file format.');
+      throw new Error("Unsupported file format.");
     }
 
     // 3. Structure using AI
@@ -262,7 +264,7 @@ bot.on("document", async (ctx) => {
 
       if (existingResume) {
         await ReesuClient.updateResume(token, existingResume.id, {
-          content: structuredContent
+          content: structuredContent,
         });
         ctx.reply("✅ Your Reesu resume has been updated!");
       } else {
@@ -277,12 +279,12 @@ bot.on("document", async (ctx) => {
     // Also keep the local bot cache updated
     const parsedData = ResumeService.parseResume(text);
     await supabase
-      .from('tele_users')
+      .from("tele_users")
       .update({
         skills: parsedData.skills,
-        job_titles: parsedData.jobTitles
+        job_titles: parsedData.jobTitles,
       })
-      .eq('telegram_id', ctx.from.id);
+      .eq("telegram_id", ctx.from.id);
 
     ctx.reply(
       `✅ Resume processed successfully!\n\nDetected Skills: ${parsedData.skills.join(", ") || "None"}\nDetected Titles: ${parsedData.jobTitles.join(", ") || "None"}\n\nYou can now use /jobs to find suitable positions.`,
@@ -303,7 +305,7 @@ bot.command("jobs", async (ctx) => {
         options = {
           role: aiParsed.role,
           skills: aiParsed.skills,
-          date: aiParsed.date
+          date: aiParsed.date,
         };
       }
     }
