@@ -1,8 +1,9 @@
 import { supabase } from '../services/supabase.js';
+import { format, subDays } from 'date-fns';
 
 export const JobScraperService = {
-  async findJobs(userId: number) {
-    // Fetch user's parsed skills and titles from Supabase
+  async findJobs(userId: number, options: { role?: string; skills?: string; date?: string } = {}) {
+    // Fetch user's parsed skills and titles from Supabase as fallback
     const { data: user, error } = await supabase
       .from('tele_users')
       .select('skills, job_titles')
@@ -13,27 +14,34 @@ export const JobScraperService = {
       throw new Error('Please upload your resume first using /resume');
     }
 
-    const query = user.job_titles?.[0] || 'Software Engineer';
-    const skills = user.skills || [];
-    
-    // We use a public job board search (Example: Jooble or similar pattern)
-    // For production, using an API like Adzuna is better. 
-    // Here we implement a generic search generator that would normally scrape or call an API.
-    
-    const searchTerms = [query, ...skills].slice(0, 3).join(' ');
-    const searchUrl = `https://www.google.com/search?q=site:lever.co+OR+site:greenhouse.io+${encodeURIComponent(searchTerms)}+after:2026-08-24`; 
-    // Note: The date is dynamically set to 7 days ago based on the system date.
+    // Defaults
+    const defaultRole = '(Frontend | Fullstack)';
+    const defaultSkills = '(typescript | javascript | angular | react | vue | "next.js")';
+    const defaultDate = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+
+    const role = options.role || (user.job_titles?.[0] ? `(${user.job_titles.join(' | ')})` : defaultRole);
+    const skills = options.skills || (user.skills && user.skills.length > 0 ? `(${user.skills.join(' | ')})` : defaultSkills);
+    const date = options.date || defaultDate;
+
+    // Google Dorking Pattern:
+    // (sites) (roles) (skills) visa_criteria (exclusions) (date)
+    const sites = '(site:linkedin.com | site:lever.co | site:greenhouse.io)';
+    const visaCriteria = 'visa sponsorship';
+    const exclusions = '"-no Visa" -not -cannot -unable -"not able" -"authorized to work"';
+
+    const fullQuery = `${sites} ${role} ${skills} ${visaCriteria} ${exclusions} after:${date}`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(fullQuery)}`;
 
     return {
-      query: searchTerms,
+      query: fullQuery,
       url: searchUrl,
-      message: `I found recent openings for "${searchTerms}". Check them out here:`
+      message: `I found recent openings matching: ${role} with ${skills}. Check them out here:`
     };
   },
 
-  async getRecentJobs(userId: number) {
+  async getRecentJobs(userId: number, options: { role?: string; skills?: string; date?: string } = {}) {
     try {
-      const result = await this.findJobs(userId);
+      const result = await this.findJobs(userId, options);
       return result;
     } catch (e: any) {
       throw e;

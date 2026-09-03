@@ -135,6 +135,25 @@ export const AIService = {
     return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
   },
 
+  async parseJobsCommand(text: string) {
+    const prompt = `
+      Extract job search preferences from the following text: "${text}"
+      Return ONLY a JSON object with these keys:
+      - role: The job title/role (e.g. "Backend Developer") or null
+      - skills: A list of skills or a comma-separated string (e.g. "Python, Go") or null
+      - date: An ISO date string (YYYY-MM-DD) or null if not mentioned.
+
+      Example: "jobs for Backend developer with Python since yesterday"
+      Output: {"role": "Backend Developer", "skills": "Python", "date": "2026-09-02"}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    const jsonMatch = response.match(/\{.*\}/s);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  },
+
   checkRateLimit
+
 
 };

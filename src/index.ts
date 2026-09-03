@@ -294,7 +294,21 @@ bot.on("document", async (ctx) => {
 
 bot.command("jobs", async (ctx) => {
   try {
-    const result = await JobScraperService.getRecentJobs(ctx.from.id);
+    const text = ctx.message.text.split(" ").slice(1).join(" ");
+    let options = {};
+
+    if (text) {
+      const aiParsed = await AIService.parseJobsCommand(text);
+      if (aiParsed) {
+        options = {
+          role: aiParsed.role,
+          skills: aiParsed.skills,
+          date: aiParsed.date
+        };
+      }
+    }
+
+    const result = await JobScraperService.getRecentJobs(ctx.from.id, options);
     ctx.reply(
       `${result.message}\n\n👉 [Click here to view jobs](${result.url})`,
       { parse_mode: "Markdown" },
