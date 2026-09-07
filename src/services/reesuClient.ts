@@ -9,6 +9,18 @@ const client = axios.create({
   },
 });
 
+// 429 comes from the API's own rate limiter (5 login / 10 register attempts
+// per minute per IP) - surface the Retry-After it sends instead of the raw
+// axios message, and skip the generic "<action> failed:" prefix for it.
+function describeError(error: any, action: string): string {
+  if (error.response?.status === 429) {
+    const retryAfter = Number(error.response.headers?.['retry-after']);
+    const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? `${retryAfter}s` : 'a minute';
+    return `Too many attempts, please wait ${wait} and try again.`;
+  }
+  return `${action} failed: ${error.response?.data?.detail || error.message}`;
+}
+
 export const ReesuClient = {
   async registerUser(email: string, username: string, password: string) {
     try {
@@ -19,7 +31,7 @@ export const ReesuClient = {
       });
       return response.data;
     } catch (error: any) {
-      throw new Error(`Reesu registration failed: ${error.response?.data?.detail || error.message}`);
+      throw new Error(describeError(error, 'Reesu registration'));
     }
   },
 
@@ -31,7 +43,7 @@ export const ReesuClient = {
       });
       return response.data; // { access_token, refresh_token }
     } catch (error: any) {
-      throw new Error(`Reesu login failed: ${error.response?.data?.detail || error.message}`);
+      throw new Error(describeError(error, 'Reesu login'));
     }
   },
 

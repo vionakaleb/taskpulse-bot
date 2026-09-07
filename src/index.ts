@@ -178,11 +178,24 @@ bot.command("clear", async (ctx) => {
   }
 });
 
+// Per-user cooldown so repeated taps on /reesu_login don't hammer the Reesu
+// API (which rate-limits /auth/login at 5 requests/minute per IP) and burn
+// through the shared limit on one impatient user.
+const reesuLoginCooldown = new Map<number, number>();
+const REESU_LOGIN_COOLDOWN_MS = 10_000;
+
 bot.command("reesu_login", async (ctx) => {
   const parts = ctx.message.text.split(" ");
   if (parts.length < 3) {
     return ctx.reply("Usage: /reesu_login [email] [password]");
   }
+
+  const lastAttempt = reesuLoginCooldown.get(ctx.from.id) ?? 0;
+  const waitMs = REESU_LOGIN_COOLDOWN_MS - (Date.now() - lastAttempt);
+  if (waitMs > 0) {
+    return ctx.reply(`⏳ Please wait ${Math.ceil(waitMs / 1000)}s before trying again.`);
+  }
+  reesuLoginCooldown.set(ctx.from.id, Date.now());
 
   const email = parts[1] ?? "";
   const password = parts[2] ?? "";
