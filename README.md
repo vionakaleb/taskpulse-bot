@@ -19,6 +19,7 @@ TaskPulse is a Telegram bot designed to help you manage your life and career. It
 
 ### 💼 Career Assistant
 - **Resume Parsing**: Upload your resume (PDF/DOCX) to automatically extract skills and job titles.
+- **Reesu Resume CRUD**: Link your [Reesu](https://reesu.netlify.app) account with `/reesu_login` and manage full resumes from the chat - upload to create/update, then `/resumes`, `/resume_view`, `/resume_rename`, and `/resume_delete` to read, rename, and remove them. Access tokens are refreshed transparently in the background.
 - **Job Scraper**: Find recent (last 7 days) job openings based on your specific skills and titles, targeting high-intent platforms like Lever and Greenhouse.
 
 ## 🛠️ Tech Stack
@@ -86,7 +87,13 @@ npm run dev
 - `/add [type] [title]` - Add item (e.g., `/add bill Electric Bill`). Now supports natural language dates!
 - `/list [type]` - View all items or filter by type (checklist, event, bill)
 - `/delete [id/name]` - Delete an item using its ID or just its name
-- `/resume` - Upload your resume for job searching
+- `/reesu_login [email] [password]` - Link your Reesu account
+- `/resume` - Upload a PDF/DOCX to create or update your Reesu resume
+- `/resume_new` - Upload a PDF/DOCX to create an *additional* Reesu resume
+- `/resumes` - List your Reesu resumes
+- `/resume_view [number]` - View a resume's full content
+- `/resume_rename [number] [title]` - Rename a resume
+- `/resume_delete [number]` - Delete a resume
 - `/jobs` - Find suitable jobs based on your profile
 - **(No Command)** - Just send a message to ask the AI about your lists!
 

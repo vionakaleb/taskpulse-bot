@@ -7,6 +7,7 @@ import { ResumeService } from "./services/resumeParser.js";
 import { JobScraperService } from "./services/jobScraper.js";
 import { AIService } from "./services/aiService.js";
 import { ReesuClient } from "./services/reesuClient.js";
+import { withReesuAuth, ReesuAuthError } from "./services/reesuAuth.js";
 
 dotenv.config();
 
@@ -43,7 +44,7 @@ bot.start((ctx) =>
 );
 bot.help((ctx) =>
   ctx.reply(
-    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n/reesu_login [email] [password] - Link your Reesu account\n/search [query] - Get a clickable Google search link for a query\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
+    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/reesu_login [email] [password] - Link your Reesu account\n\nReesu resumes:\n/resume - Upload a PDF/DOCX to create or update your resume\n/resume_new - Upload a PDF/DOCX to create an additional resume\n/resumes - List your Reesu resumes\n/resume_view [number] - View a resume\'s full content\n/resume_rename [number] [title] - Rename a resume\n/resume_delete [number] - Delete a resume\n/jobs - Find suitable jobs\n\n/search [query] - Get a clickable Google search link for a query\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
   ),
 );
 
@@ -204,6 +205,11 @@ bot.command("reesu_login", async (ctx) => {
     ctx.reply("Authenticating with Reesu... ⏳");
     const tokens = await ReesuClient.loginUser(email, password);
 
+    // Ensure the tele_users row exists first - an update against a
+    // non-existent row silently affects zero rows (no error), which would
+    // otherwise drop the tokens for a brand-new user's first command.
+    await ItemService.ensureUser(ctx.from.id, ctx.from.username);
+
     const { error } = await supabase
       .from("tele_users")
       .update({
@@ -219,9 +225,158 @@ bot.command("reesu_login", async (ctx) => {
   }
 });
 
-// --- Resume & Jobs ---
+// --- Resume CRUD ---
+
+// Tracks whether the next uploaded document should create a brand-new
+// resume (/resume_new) instead of the default upsert behavior (/resume).
+const pendingResumeAction = new Map<number, "create">();
+
+function formatResumeList(resumes: any[]): string {
+  return resumes
+    .map(
+      (r, i) =>
+        `${i + 1}. ${r.title} ${r.is_public ? "🌐" : "🔒"} — updated ${new Date(r.updated_at).toLocaleDateString()}`,
+    )
+    .join("\n");
+}
+
+function formatResumeDetail(resume: any): string {
+  const c = resume.content || {};
+  const lines: string[] = [
+    `📄 ${resume.title} (${resume.is_public ? "public" : "private"})`,
+  ];
+  if (c.name) lines.push(`👤 ${c.name}${c.headline ? ` — ${c.headline}` : ""}`);
+
+  const contact = [c.location, c.email, c.phone, c.website, c.linkedin]
+    .filter(Boolean)
+    .join(" | ");
+  if (contact) lines.push(contact);
+  if (c.summary) lines.push(`\n${c.summary}`);
+
+  const section = (label: string, entries: any[] = []) => {
+    if (!entries.length) return;
+    lines.push(`\n${label.toUpperCase()}`);
+    for (const e of entries) {
+      const head = [e.title, e.org].filter(Boolean).join(" @ ");
+      const meta = [e.location, e.dates].filter(Boolean).join(" · ");
+      lines.push(`• ${head}${meta ? ` (${meta})` : ""}`);
+      for (const b of e.bullets || []) lines.push(`   - ${b}`);
+    }
+  };
+  section("Experience", c.experience);
+  section("Education", c.education);
+  section("Projects", c.projects);
+  section("Certifications", c.certifications);
+  section("Achievements", c.achievements);
+
+  if (c.skills?.length) {
+    lines.push(`\nSKILLS`);
+    for (const s of c.skills) lines.push(`• ${s.label}: ${s.value}`);
+  }
+  if (c.languages?.length) {
+    lines.push(`\nLANGUAGES`);
+    lines.push(c.languages.map((l: any) => `${l.name} (${l.level})`).join(", "));
+  }
+
+  const text = lines.join("\n");
+  return text.length > 4000 ? `${text.slice(0, 4000)}\n… (truncated)` : text;
+}
+
+// Parses the leading "[number]" arg shared by /resume_view, /resume_rename
+// and /resume_delete, returning null (with a usage reply already sent) if
+// it's missing or not a positive integer.
+function parseResumeIndexArg(ctx: any, usage: string): number | null {
+  const arg = ctx.message.text.split(" ")[1];
+  const index = Number(arg);
+  if (!arg || !Number.isInteger(index) || index < 1) {
+    ctx.reply(usage);
+    return null;
+  }
+  return index;
+}
+
+bot.command("resumes", async (ctx) => {
+  try {
+    const resumes = await withReesuAuth(ctx.from.id, (token) =>
+      ReesuClient.listResumes(token),
+    );
+    if (!resumes.length) {
+      return ctx.reply(
+        "You don't have any Reesu resumes yet. Use /resume and send a PDF/DOCX to create one.",
+      );
+    }
+    ctx.reply(
+      `Your Reesu resumes:\n${formatResumeList(resumes)}\n\nUse /resume_view [number], /resume_rename [number] [title], or /resume_delete [number].`,
+    );
+  } catch (e: any) {
+    ctx.reply(`❌ ${e.message}`);
+  }
+});
+
+bot.command("resume_view", async (ctx) => {
+  const index = parseResumeIndexArg(ctx, "Usage: /resume_view [number] — see /resumes for the list.");
+  if (index === null) return;
+
+  try {
+    const resume = await withReesuAuth(ctx.from.id, async (token) => {
+      const resumes = await ReesuClient.listResumes(token);
+      const target = resumes[index - 1];
+      if (!target) throw new Error(`No resume #${index}. Run /resumes to see your list.`);
+      return ReesuClient.getResume(token, target.id);
+    });
+    ctx.reply(formatResumeDetail(resume));
+  } catch (e: any) {
+    ctx.reply(`❌ ${e.message}`);
+  }
+});
+
+bot.command("resume_rename", async (ctx) => {
+  const parts = ctx.message.text.split(" ").slice(1);
+  const index = Number(parts[0]);
+  const newTitle = parts.slice(1).join(" ").trim();
+  if (!parts[0] || !Number.isInteger(index) || index < 1 || !newTitle) {
+    return ctx.reply("Usage: /resume_rename [number] [new title]");
+  }
+
+  try {
+    await withReesuAuth(ctx.from.id, async (token) => {
+      const resumes = await ReesuClient.listResumes(token);
+      const target = resumes[index - 1];
+      if (!target) throw new Error(`No resume #${index}. Run /resumes to see your list.`);
+      await ReesuClient.updateResume(token, target.id, { title: newTitle });
+    });
+    ctx.reply(`✅ Renamed resume #${index} to "${newTitle}".`);
+  } catch (e: any) {
+    ctx.reply(`❌ ${e.message}`);
+  }
+});
+
+bot.command("resume_delete", async (ctx) => {
+  const index = parseResumeIndexArg(ctx, "Usage: /resume_delete [number] — see /resumes for the list.");
+  if (index === null) return;
+
+  try {
+    const deletedTitle = await withReesuAuth(ctx.from.id, async (token) => {
+      const resumes = await ReesuClient.listResumes(token);
+      const target = resumes[index - 1];
+      if (!target) throw new Error(`No resume #${index}. Run /resumes to see your list.`);
+      await ReesuClient.deleteResume(token, target.id);
+      return target.title;
+    });
+    ctx.reply(`🗑️ Deleted resume "${deletedTitle}".`);
+  } catch (e: any) {
+    ctx.reply(`❌ ${e.message}`);
+  }
+});
+
 bot.command("resume", async (ctx) => {
+  pendingResumeAction.delete(ctx.from.id);
   ctx.reply("Please send me your resume as a PDF or DOCX file.");
+});
+
+bot.command("resume_new", async (ctx) => {
+  pendingResumeAction.set(ctx.from.id, "create");
+  ctx.reply("Please send me your resume as a PDF or DOCX file to create a NEW resume.");
 });
 
 bot.on("document", async (ctx) => {
@@ -234,25 +389,13 @@ bot.on("document", async (ctx) => {
     return ctx.reply("Unsupported file type. Please send PDF or DOCX.");
   }
 
+  const createNew = pendingResumeAction.get(ctx.from.id) === "create";
+  pendingResumeAction.delete(ctx.from.id);
+
   try {
     ctx.reply("Parsing your resume... ⏳");
 
-    // 1. Get Reesu auth from DB
-    const { data: user, error: userError } = await supabase
-      .from("tele_users")
-      .select("reesu_access_token, reesu_refresh_token")
-      .eq("telegram_id", ctx.from.id)
-      .single();
-
-    if (userError || !user?.reesu_access_token) {
-      return ctx.reply(
-        "❌ Please link your Reesu account first using /reesu_login [email] [password]",
-      );
-    }
-
-    let token = user.reesu_access_token;
-
-    // 2. Parse the resume text
+    // 1. Parse the resume text
     const fileLink = await ctx.telegram.getFileLink(file.file_id);
     const response = await fetch(fileLink as URL);
     const buffer = Buffer.from(await response.arrayBuffer());
@@ -270,32 +413,32 @@ bot.on("document", async (ctx) => {
       throw new Error("Unsupported file format.");
     }
 
-    // 3. Structure using AI
+    // 2. Structure using AI
     ctx.reply("Structuring your resume for Reesu... 🧠");
     const structuredContent = await AIService.structureResume(text);
     if (!structuredContent) {
       throw new Error("Failed to structure the resume content.");
     }
+    const title = structuredContent.name
+      ? `${structuredContent.name} — Resume`
+      : "My Resume";
 
-    // 4. Update Reesu API
-    // First, try to find an existing resume
-    try {
-      const resumesResponse = await ReesuClient.listResumes(token);
-      const existingResume = resumesResponse[0];
-
-      if (existingResume) {
-        await ReesuClient.updateResume(token, existingResume.id, {
-          content: structuredContent,
-        });
-        ctx.reply("✅ Your Reesu resume has been updated!");
-      } else {
-        await ReesuClient.createResume(token, "My Resume", structuredContent);
-        ctx.reply("✅ Your first Reesu resume has been created!");
+    // 3. Create or update via the Reesu API (auto-refreshing the access
+    // token if it has expired since the user last talked to the bot).
+    await withReesuAuth(ctx.from.id, async (token) => {
+      if (!createNew) {
+        const resumes = await ReesuClient.listResumes(token);
+        const existingResume = resumes[0]; // most recently updated
+        if (existingResume) {
+          await ReesuClient.updateResume(token, existingResume.id, {
+            content: structuredContent,
+          });
+          return ctx.reply(`✅ Your resume "${existingResume.title}" has been updated!`);
+        }
       }
-    } catch (apiError: any) {
-      console.error("Reesu API Error:", apiError);
-      throw new Error(`Reesu API failed: ${apiError.message}`);
-    }
+      await ReesuClient.createResume(token, title, structuredContent);
+      ctx.reply(`✅ Created a new Reesu resume: "${title}"!`);
+    });
 
     // Also keep the local bot cache updated
     const parsedData = ResumeService.parseResume(text);
@@ -308,9 +451,12 @@ bot.on("document", async (ctx) => {
       .eq("telegram_id", ctx.from.id);
 
     ctx.reply(
-      `✅ Resume processed successfully!\n\nDetected Skills: ${parsedData.skills.join(", ") || "None"}\nDetected Titles: ${parsedData.jobTitles.join(", ") || "None"}\n\nYou can now use /jobs to find suitable positions.`,
+      `Detected Skills: ${parsedData.skills.join(", ") || "None"}\nDetected Titles: ${parsedData.jobTitles.join(", ") || "None"}\n\nYou can now use /jobs to find suitable positions, or /resumes to manage your Reesu resumes.`,
     );
   } catch (e: any) {
+    if (e instanceof ReesuAuthError) {
+      return ctx.reply(`❌ ${e.message}`);
+    }
     ctx.reply(`❌ Error: ${e.message}`);
   }
 });

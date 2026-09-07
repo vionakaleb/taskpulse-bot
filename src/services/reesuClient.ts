@@ -21,6 +21,15 @@ function describeError(error: any, action: string): string {
   return `${action} failed: ${error.response?.data?.detail || error.message}`;
 }
 
+// Wraps an axios error into a plain Error, preserving the HTTP status code
+// (used by reesuAuth's withReesuAuth to detect an expired access token and
+// transparently retry after a refresh).
+function wrapError(error: any, action: string): Error {
+  const wrapped = new Error(describeError(error, action));
+  (wrapped as any).status = error.response?.status;
+  return wrapped;
+}
+
 export const ReesuClient = {
   async registerUser(email: string, username: string, password: string) {
     try {
@@ -67,7 +76,7 @@ export const ReesuClient = {
       );
       return response.data;
     } catch (error: any) {
-      throw new Error(`Reesu resume creation failed: ${error.response?.data?.detail || error.message}`);
+      throw wrapError(error, 'Reesu resume creation');
     }
   },
 
@@ -80,7 +89,7 @@ export const ReesuClient = {
       );
       return response.data;
     } catch (error: any) {
-      throw new Error(`Reesu resume update failed: ${error.response?.data?.detail || error.message}`);
+      throw wrapError(error, 'Reesu resume update');
     }
   },
 
@@ -92,7 +101,7 @@ export const ReesuClient = {
       );
       return response.data;
     } catch (error: any) {
-      throw new Error(`Reesu resume fetch failed: ${error.response?.data?.detail || error.message}`);
+      throw wrapError(error, 'Reesu resume fetch');
     }
   },
 
@@ -104,7 +113,19 @@ export const ReesuClient = {
       );
       return response.data;
     } catch (error: any) {
-      throw new Error(`Reesu list resumes failed: ${error.response?.data?.detail || error.message}`);
+      throw wrapError(error, 'Reesu list resumes');
+    }
+  },
+
+  async deleteResume(token: string, resumeId: string) {
+    try {
+      await client.delete(
+        `/resumes/${resumeId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return true;
+    } catch (error: any) {
+      throw wrapError(error, 'Reesu resume deletion');
     }
   },
 };
