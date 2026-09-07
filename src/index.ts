@@ -43,9 +43,17 @@ bot.start((ctx) =>
 );
 bot.help((ctx) =>
   ctx.reply(
-    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n/reesu_login [email] [password] - Link your Reesu account\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
+    'Available commands:\n/add [type] [title] - Add item (checklist, event, bill)\n/list [type] - List all or specific items (checklist, event, bill)\n/delete [id] - Delete an item\n/clear [type] - Clear all items of a specific type\n/resume - Upload your resume for job searching\n/jobs - Find suitable jobs\n/reesu_login [email] [password] - Link your Reesu account\n/search [query] - Get a clickable Google search link for a query\n\n💡 You can also just talk to me! Ask things like "Kapan saya beli cat-litter?"',
   ),
 );
+
+bot.command("search", (ctx) => {
+  const query = ctx.message.text.split(" ").slice(1).join(" ").trim();
+  if (!query) return ctx.reply("Usage: /search [query]");
+
+  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  ctx.reply(url);
+});
 
 bot.command("add", async (ctx) => {
   const text = ctx.message.text.split(" ").slice(1).join(" ");
@@ -341,7 +349,8 @@ bot.on("text", async (ctx) => {
       ctx.message.text,
       items,
     );
-    ctx.reply(answer);
+    await ctx.reply(answer);
+    await new Promise((resolve) => setTimeout(resolve, 10));
   } catch (e: any) {
     console.error("NL Query Error:", e);
     ctx.reply("❌ Sorry, I had trouble processing that request.");
