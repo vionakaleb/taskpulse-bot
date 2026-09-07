@@ -65,6 +65,7 @@ Check your Render logs. You should see:
 Run the following SQL scripts in your Supabase SQL Editor:
 1. Execute `supabase_schema.sql` to create the `tele_users` and `tele_items` tables.
 2. Execute `supabase_cron.sql` to set up the cleanup and notification functions.
+3. If your project already existed before a given date, apply any new files under `migrations/` (in order) to pick up schema changes — e.g. `migrations/20260907000000_add_reesu_columns_to_tele_users.sql`.
 
 ### 3. Installation & Run
 ```bash
